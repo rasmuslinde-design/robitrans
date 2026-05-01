@@ -1,0 +1,30 @@
+{
+  "name": "robitrans",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,magenta \"npm run dev -w apps/web\" \"npm run dev -w apps/api\"",
+    "build": "npm run build -w apps/web && npm run build -w apps/api",
+    "lint": "npm run lint -w apps/web && npm run lint -w apps/api",
+    "test": "npm run test -w apps/api"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rasmuslinde-design/robitrans.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rasmuslinde-design/robitrans/issues"
+  },
+  "homepage": "https://github.com/rasmuslinde-design/robitrans#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
