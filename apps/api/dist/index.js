@@ -1,12 +1,13 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import crypto from "node:crypto";
-import { loadEnv } from "./env";
-import { openDb } from "./db";
-import { CreateBookingSchema, isWeekend } from "./validation";
-import { sendBookingEmail } from "./mailer";
+import { loadEnv } from "./env.js";
+import { openDb } from "./db.js";
+import { CreateBookingSchema, isWeekend } from "./validation.js";
+import { sendBookingEmail } from "./mailer.js";
+dotenv.config();
 const env = loadEnv(process.env);
 const db = openDb(env.DATABASE_PATH);
 const app = express();
@@ -22,7 +23,9 @@ app.get("/health", (_req, res) => {
 app.get("/api/availability", (req, res) => {
     const month = String(req.query.month ?? ""); // YYYY-MM
     if (!/^\d{4}-\d{2}$/.test(month)) {
-        return res.status(400).json({ message: "month peab olema formaadis YYYY-MM" });
+        return res
+            .status(400)
+            .json({ message: "month peab olema formaadis YYYY-MM" });
     }
     const rows = db
         .prepare("SELECT date FROM bookings WHERE date LIKE ? ORDER BY date ASC")
@@ -32,22 +35,28 @@ app.get("/api/availability", (req, res) => {
 app.post("/api/bookings", async (req, res) => {
     const parsed = CreateBookingSchema.safeParse(req.body);
     if (!parsed.success) {
-        return res.status(400).json({ message: "Vigane sisend", issues: parsed.error.issues });
+        return res
+            .status(400)
+            .json({ message: "Vigane sisend", issues: parsed.error.issues });
     }
     const booking = parsed.data;
     if (isWeekend(booking.date)) {
-        return res.status(400).json({ message: "Nädalavahetusel broneerida ei saa." });
+        return res
+            .status(400)
+            .json({ message: "Nädalavahetusel broneerida ei saa." });
     }
     // Check if already booked
     const exists = db
         .prepare("SELECT 1 FROM bookings WHERE date = ?")
         .get(booking.date);
     if (exists) {
-        return res.status(409).json({ message: "See kuupäev on juba broneeritud." });
+        return res
+            .status(409)
+            .json({ message: "See kuupäev on juba broneeritud." });
     }
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    db.prepare("INSERT INTO bookings (id, date, rentType, name, email, phone, additionalInfo, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(id, booking.date, booking.rentType, booking.name, booking.email, booking.phone, booking.additionalInfo, createdAt);
+    db.prepare("INSERT INTO bookings (id, date, machineType, rentType, name, email, phone, additionalInfo, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(id, booking.date, booking.machineType, booking.rentType, booking.name, booking.email, booking.phone, booking.additionalInfo, createdAt);
     try {
         const mail = await sendBookingEmail({ env, booking });
         res.status(201).json({ id, createdAt, mail });
@@ -56,7 +65,11 @@ app.post("/api/bookings", async (req, res) => {
         res.status(201).json({
             id,
             createdAt,
-            mail: { ok: false, skipped: false, reason: "E-maili saatmine ebaõnnestus." },
+            mail: {
+                ok: false,
+                skipped: false,
+                reason: "E-maili saatmine ebaõnnestus.",
+            },
         });
     }
 });
@@ -75,9 +88,77 @@ app.get("/api/admin/bookings", (req, res) => {
         return res.status(401).json({ message: "Pole lubatud" });
     }
     const rows = db
-        .prepare("SELECT id, date, rentType, name, email, phone, additionalInfo, createdAt FROM bookings ORDER BY date DESC")
+        .prepare("SELECT id, date, machineType, rentType, name, email, phone, additionalInfo, createdAt FROM bookings ORDER BY date DESC")
         .all();
     res.json({ bookings: rows });
+});
+function requireAdmin(req, res) {
+    const auth = String(req.headers.authorization ?? "");
+    const token = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
+    if (token !== env.ADMIN_TOKEN) {
+        res.status(401).json({ message: "Pole lubatud" });
+        return null;
+    }
+    return true;
+}
+app.delete("/api/admin/bookings/:id", (req, res) => {
+    if (!requireAdmin(req, res))
+        return;
+    const id = String(req.params.id ?? "");
+    if (!id)
+        return res.status(400).json({ message: "Puuduv id" });
+    const info = db.prepare("DELETE FROM bookings WHERE id = ?").run(id);
+    if (!info.changes)
+        return res.status(404).json({ message: "Broneeringut ei leitud" });
+    return res.json({ ok: true });
+});
+app.patch("/api/admin/bookings/:id", (req, res) => {
+    if (!requireAdmin(req, res))
+        return;
+    const id = String(req.params.id ?? "");
+    if (!id)
+        return res.status(400).json({ message: "Puuduv id" });
+    const current = db
+        .prepare("SELECT id, date, machineType, rentType, name, email, phone, additionalInfo, createdAt FROM bookings WHERE id = ?")
+        .get(id);
+    if (!current)
+        return res.status(404).json({ message: "Broneeringut ei leitud" });
+    // Allow changing date/machineType/rentType/contact/details.
+    // For simplicity and safety, validate by reusing CreateBookingSchema on a merged object.
+    const merged = {
+        machineType: req.body?.machineType ?? current.machineType,
+        date: req.body?.date ?? current.date,
+        rentType: req.body?.rentType ?? current.rentType,
+        name: req.body?.name ?? current.name,
+        email: req.body?.email ?? current.email,
+        phone: req.body?.phone ?? current.phone,
+        additionalInfo: req.body?.additionalInfo ?? current.additionalInfo,
+    };
+    const parsed = CreateBookingSchema.safeParse(merged);
+    if (!parsed.success) {
+        return res
+            .status(400)
+            .json({ message: "Vigane sisend", issues: parsed.error.issues });
+    }
+    const next = parsed.data;
+    if (isWeekend(next.date)) {
+        return res
+            .status(400)
+            .json({ message: "Nädalavahetusel broneerida ei saa." });
+    }
+    // If date changes, ensure new date isn't already booked by another booking
+    if (next.date !== current.date) {
+        const exists = db
+            .prepare("SELECT 1 FROM bookings WHERE date = ? AND id <> ?")
+            .get(next.date, id);
+        if (exists) {
+            return res
+                .status(409)
+                .json({ message: "See kuupäev on juba broneeritud." });
+        }
+    }
+    db.prepare("UPDATE bookings SET date = ?, machineType = ?, rentType = ?, name = ?, email = ?, phone = ?, additionalInfo = ? WHERE id = ?").run(next.date, next.machineType, next.rentType, next.name, next.email, next.phone, next.additionalInfo, id);
+    return res.json({ ok: true });
 });
 app.listen(env.PORT, () => {
     // eslint-disable-next-line no-console

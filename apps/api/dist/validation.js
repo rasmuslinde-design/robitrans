@@ -1,6 +1,8 @@
 import { z } from "zod";
 export const RentTypeSchema = z.enum(["JUHIGA", "JUHITA"]);
+export const MachineTypeSchema = z.enum(["KRAANAUTO", "TOSTUK"]);
 export const CreateBookingSchema = z.object({
+    machineType: MachineTypeSchema,
     date: z
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/, "Kuupäev peab olema formaadis YYYY-MM-DD"),

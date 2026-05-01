@@ -1,13 +1,15 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import crypto from "node:crypto";
 
-import { loadEnv } from "./env";
-import { openDb } from "./db";
-import { CreateBookingSchema, isWeekend } from "./validation";
-import { sendBookingEmail } from "./mailer";
+import { loadEnv } from "./env.js";
+import { openDb } from "./db.js";
+import { CreateBookingSchema, isWeekend } from "./validation.js";
+import { sendBookingEmail } from "./mailer.js";
+
+dotenv.config();
 
 const env = loadEnv(process.env);
 const db = openDb(env.DATABASE_PATH);

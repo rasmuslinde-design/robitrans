@@ -23,10 +23,12 @@ export async function sendBookingEmail(args) {
         };
     }
     const { booking, env } = args;
-    const subject = `Uus broneering: ${booking.date} (${booking.rentType === "JUHIGA" ? "Juhiga rent" : "Juhita rent"})`;
+    const machineLabel = booking.machineType === "KRAANAUTO" ? "Kraanaauto" : "Tõstuk (forklift)";
+    const subject = `Uus broneering: ${machineLabel} / ${booking.date} (${booking.rentType === "JUHIGA" ? "Juhiga rent" : "Juhita rent"})`;
     const text = [
         "RobiTrans OÜ - uus broneering",
         "",
+        `Masin: ${machineLabel}`,
         `Kuupäev: ${booking.date}`,
         `Rent: ${booking.rentType === "JUHIGA" ? "Juhiga" : "Juhita"}`,
         "",

@@ -1,6 +1,6 @@
 import { z } from "zod";
 const EnvSchema = z.object({
-    PORT: z.coerce.number().default(5174),
+    PORT: z.coerce.number().default(5175),
     ORIGIN: z.string().default("http://localhost:5173"),
     DATABASE_PATH: z.string().default("./data/robitrans.sqlite"),
     SMTP_HOST: z.string().optional(),

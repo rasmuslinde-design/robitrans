@@ -10,6 +10,7 @@ export function openDb(dbPath) {
     CREATE TABLE IF NOT EXISTS bookings (
       id TEXT PRIMARY KEY,
       date TEXT NOT NULL,
+      machineType TEXT NOT NULL DEFAULT 'TOSTUK',
       rentType TEXT NOT NULL,
       name TEXT NOT NULL,
       email TEXT NOT NULL,
@@ -18,8 +19,17 @@ export function openDb(dbPath) {
       createdAt TEXT NOT NULL
     );
 
+    -- If the table existed before, add the column (SQLite will ignore if it already exists via try/catch below)
+
     CREATE UNIQUE INDEX IF NOT EXISTS bookings_date_unique
     ON bookings(date);
   `);
+    // Lightweight migration for existing DBs
+    try {
+        db.exec("ALTER TABLE bookings ADD COLUMN machineType TEXT NOT NULL DEFAULT 'TOSTUK';");
+    }
+    catch {
+        // ignore (already exists)
+    }
     return db;
 }
