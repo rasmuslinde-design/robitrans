@@ -3,6 +3,8 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import crypto from "node:crypto";
+import path from "node:path";
+import fs from "node:fs";
 
 import { loadEnv } from "./env.js";
 import { openDb } from "./db.js";
@@ -23,6 +25,32 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "1mb" }));
+
+// --- Serve frontend (single-service deploy support) ---
+// When deploying as a single Render Web Service, we serve the built Vite app from apps/web/dist.
+// In dev, Vite runs separately so this is mostly for production.
+const webDistDir = path.resolve(process.cwd(), "../web/dist");
+const webIndexHtml = path.join(webDistDir, "index.html");
+
+if (fs.existsSync(webIndexHtml)) {
+  app.use(express.static(webDistDir));
+
+  // SPA fallback (supports /admin etc)
+  app.get("/", (_req, res) => res.sendFile(webIndexHtml));
+  app.get("/admin", (_req, res) => res.sendFile(webIndexHtml));
+  app.get("/masinad", (_req, res) => res.sendFile(webIndexHtml));
+  app.get("/broneerimine", (_req, res) => res.sendFile(webIndexHtml));
+  app.get("/tehtud-tood", (_req, res) => res.sendFile(webIndexHtml));
+} else {
+  // Helpful default when web isn't built
+  app.get("/", (_req, res) => {
+    res
+      .status(200)
+      .send(
+        "API is running. Frontend is not built (missing apps/web/dist). Build the web app to serve it from this service.",
+      );
+  });
+}
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });

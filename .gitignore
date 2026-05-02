@@ -1,1 +1,12 @@
 node_modules
+.env
+
+# Build outputs
+apps/api/dist/
+apps/web/dist/
+
+# Local SQLite DB (dev only)
+data/*.sqlite
+data/*.sqlite-*
+apps/api/data/*.sqlite
+apps/api/data/*.sqlite-*

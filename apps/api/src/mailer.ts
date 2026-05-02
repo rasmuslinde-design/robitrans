@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
-import type { Env } from "./env";
-import type { CreateBookingInput } from "./validation";
+import type { Env } from "./env.js";
+import type { CreateBookingInput } from "./validation.js";
 
 export function createTransport(env: Env) {
   const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } = env;
