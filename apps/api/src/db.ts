@@ -20,6 +20,7 @@ export type MachineRow = {
   description: string;
   featuresJson: string; // JSON stringified string[]
   imageUrl: string;
+  pricePerHour: number;
   active: 0 | 1;
   createdAt: string;
 };
@@ -55,10 +56,20 @@ export function openDb(dbPath: string) {
       description TEXT NOT NULL,
       featuresJson TEXT NOT NULL,
       imageUrl TEXT NOT NULL,
+      pricePerHour INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       createdAt TEXT NOT NULL
     );
   `);
+
+  // Lightweight migration for existing DBs
+  try {
+    db.exec(
+      "ALTER TABLE machines ADD COLUMN pricePerHour INTEGER NOT NULL DEFAULT 0;",
+    );
+  } catch {
+    // ignore (already exists)
+  }
 
   // Lightweight migration for existing DBs
   try {
@@ -76,7 +87,7 @@ export function openDb(dbPath: string) {
   if ((machineCount?.c ?? 0) === 0) {
     const now = new Date().toISOString();
     db.prepare(
-      "INSERT INTO machines (id, name, description, featuresJson, imageUrl, active, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO machines (id, name, description, featuresJson, imageUrl, pricePerHour, active, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     ).run(
       "machine-kraanaauto",
       "Kraanaauto rent",
@@ -87,11 +98,12 @@ export function openDb(dbPath: string) {
         "Kiire kohaletoomine",
       ]),
       "/kraana.webp",
+      70,
       1,
       now,
     );
     db.prepare(
-      "INSERT INTO machines (id, name, description, featuresJson, imageUrl, active, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO machines (id, name, description, featuresJson, imageUrl, pricePerHour, active, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     ).run(
       "machine-tostuk",
       "Tõstuk (forklift) rent",
@@ -102,9 +114,22 @@ export function openDb(dbPath: string) {
         "Kõrge töökindlus",
       ]),
       "/forklift.avif",
+      50,
       1,
       now,
     );
+  }
+
+  // Backfill prices for existing rows (older DBs may have 0 after migration)
+  try {
+    db.prepare(
+      "UPDATE machines SET pricePerHour = 70 WHERE id = 'machine-kraanaauto' AND (pricePerHour IS NULL OR pricePerHour = 0)",
+    ).run();
+    db.prepare(
+      "UPDATE machines SET pricePerHour = 50 WHERE id = 'machine-tostuk' AND (pricePerHour IS NULL OR pricePerHour = 0)",
+    ).run();
+  } catch {
+    // ignore
   }
 
   return db;

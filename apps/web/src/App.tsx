@@ -73,6 +73,7 @@ type Machine = {
   description: string;
   features: string[];
   imageUrl: string;
+  pricePerHour: number;
   createdAt: string;
 };
 
@@ -235,6 +236,7 @@ function Machines() {
           <h3>{m.name}</h3>
           <p className="muted">{m.description}</p>
           <ul className="list">
+            <li>Hind: {m.pricePerHour} € / tund</li>
             {m.features.map((f) => (
               <li key={f}>{f}</li>
             ))}
@@ -558,8 +560,15 @@ function Admin() {
     name: string;
     description: string;
     imageUrl: string;
+    pricePerHour: string;
     features: string;
-  }>({ name: "", description: "", imageUrl: "", features: "" });
+  }>({
+    name: "",
+    description: "",
+    imageUrl: "",
+    pricePerHour: "",
+    features: "",
+  });
 
   const [editing, setEditing] = useState<null | {
     id: string;
@@ -577,6 +586,7 @@ function Admin() {
     name: string;
     description: string;
     imageUrl: string;
+    pricePerHour: string;
     active: 0 | 1;
     features: string;
   }>(null);
@@ -691,6 +701,7 @@ function Admin() {
         name: newMachine.name,
         description: newMachine.description,
         imageUrl: newMachine.imageUrl,
+        pricePerHour: Number(newMachine.pricePerHour),
         features,
       }),
     });
@@ -699,7 +710,13 @@ function Admin() {
       setError((data as any)?.message ?? "Lisamine ebaõnnestus.");
       return;
     }
-    setNewMachine({ name: "", description: "", imageUrl: "", features: "" });
+    setNewMachine({
+      name: "",
+      description: "",
+      imageUrl: "",
+      pricePerHour: "",
+      features: "",
+    });
     await loadMachines(token);
   }
 
@@ -730,6 +747,7 @@ function Admin() {
         name: editingMachine.name,
         description: editingMachine.description,
         imageUrl: editingMachine.imageUrl,
+        pricePerHour: Number(editingMachine.pricePerHour),
         active: editingMachine.active,
         features: parseFeatureLines(editingMachine.features),
       }),
@@ -1054,6 +1072,20 @@ function Admin() {
                   />
                 </div>
                 <div className="form__row">
+                  <label>Hind (€ / tund)</label>
+                  <input
+                    inputMode="numeric"
+                    value={newMachine.pricePerHour}
+                    onChange={(e) =>
+                      setNewMachine({
+                        ...newMachine,
+                        pricePerHour: e.target.value,
+                      })
+                    }
+                    placeholder="Näiteks 70"
+                  />
+                </div>
+                <div className="form__row">
                   <label>Omadused (1 rida = 1 punkt)</label>
                   <textarea
                     rows={4}
@@ -1076,6 +1108,7 @@ function Admin() {
                   <tr>
                     <th>Nimi</th>
                     <th>Pilt</th>
+                    <th>Hind</th>
                     <th>Aktiivne</th>
                     <th>Loodud</th>
                     <th>Tegevused</th>
@@ -1097,6 +1130,7 @@ function Admin() {
                           alt={m.name}
                         />
                       </td>
+                      <td>{m.pricePerHour} € / tund</td>
                       <td>{m.active ? "Jah" : "Ei"}</td>
                       <td>{new Date(m.createdAt).toLocaleString("et-EE")}</td>
                       <td>
@@ -1111,6 +1145,7 @@ function Admin() {
                                 name: m.name,
                                 description: m.description,
                                 imageUrl: m.imageUrl,
+                                pricePerHour: String(m.pricePerHour ?? ""),
                                 active: m.active,
                                 features: (m.features ?? []).join("\n"),
                               })
@@ -1176,6 +1211,19 @@ function Admin() {
                         setEditingMachine({
                           ...editingMachine,
                           imageUrl: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="form__row">
+                    <label>Hind (€ / tund)</label>
+                    <input
+                      inputMode="numeric"
+                      value={editingMachine.pricePerHour}
+                      onChange={(e) =>
+                        setEditingMachine({
+                          ...editingMachine,
+                          pricePerHour: e.target.value,
                         })
                       }
                     />
@@ -1301,7 +1349,7 @@ export default function App() {
 
       <Section
         id="tehtud-tood"
-        title="Tehtud tööd"
+        title="Milleks meie masinad on võimelised"
         subtitle="Mõned näited töödest, mida teeme."
       >
         <Works />

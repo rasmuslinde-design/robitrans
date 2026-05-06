@@ -74,7 +74,7 @@ app.get("/api/availability", (req, res) => {
 app.get("/api/machines", (_req, res) => {
   const rows = db
     .prepare(
-      "SELECT id, name, description, featuresJson, imageUrl, active, createdAt FROM machines WHERE active = 1 ORDER BY createdAt ASC",
+      "SELECT id, name, description, featuresJson, imageUrl, pricePerHour, active, createdAt FROM machines WHERE active = 1 ORDER BY createdAt ASC",
     )
     .all() as Array<{
     id: string;
@@ -82,6 +82,7 @@ app.get("/api/machines", (_req, res) => {
     description: string;
     featuresJson: string;
     imageUrl: string;
+    pricePerHour: number;
     active: 0 | 1;
     createdAt: string;
   }>;
@@ -92,6 +93,7 @@ app.get("/api/machines", (_req, res) => {
     description: r.description,
     features: JSON.parse(r.featuresJson ?? "[]"),
     imageUrl: r.imageUrl,
+    pricePerHour: r.pricePerHour ?? 0,
     createdAt: r.createdAt,
   }));
 
@@ -201,7 +203,7 @@ app.get("/api/admin/machines", (req, res) => {
 
   const rows = db
     .prepare(
-      "SELECT id, name, description, featuresJson, imageUrl, active, createdAt FROM machines ORDER BY createdAt DESC",
+      "SELECT id, name, description, featuresJson, imageUrl, pricePerHour, active, createdAt FROM machines ORDER BY createdAt DESC",
     )
     .all() as Array<{
     id: string;
@@ -209,6 +211,7 @@ app.get("/api/admin/machines", (req, res) => {
     description: string;
     featuresJson: string;
     imageUrl: string;
+    pricePerHour: number;
     active: 0 | 1;
     createdAt: string;
   }>;
@@ -220,6 +223,7 @@ app.get("/api/admin/machines", (req, res) => {
       description: r.description,
       features: JSON.parse(r.featuresJson ?? "[]"),
       imageUrl: r.imageUrl,
+      pricePerHour: r.pricePerHour ?? 0,
       active: r.active,
       createdAt: r.createdAt,
     })),
@@ -232,21 +236,38 @@ app.post("/api/admin/machines", (req, res) => {
   const name = String(req.body?.name ?? "").trim();
   const description = String(req.body?.description ?? "").trim();
   const imageUrl = String(req.body?.imageUrl ?? "").trim();
+  const pricePerHour = Number(req.body?.pricePerHour ?? NaN);
   const features = Array.isArray(req.body?.features)
     ? (req.body.features as unknown[]).map((x) => String(x))
     : [];
 
-  if (!name || !description || !imageUrl || features.length === 0) {
+  if (
+    !name ||
+    !description ||
+    !imageUrl ||
+    features.length === 0 ||
+    !Number.isFinite(pricePerHour) ||
+    pricePerHour <= 0
+  ) {
     return res.status(400).json({
-      message: "Puuduvad väljad (name, description, imageUrl, features).",
+      message:
+        "Puuduvad väljad (name, description, imageUrl, features, pricePerHour).",
     });
   }
 
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   db.prepare(
-    "INSERT INTO machines (id, name, description, featuresJson, imageUrl, active, createdAt) VALUES (?, ?, ?, ?, ?, 1, ?)",
-  ).run(id, name, description, JSON.stringify(features), imageUrl, createdAt);
+    "INSERT INTO machines (id, name, description, featuresJson, imageUrl, pricePerHour, active, createdAt) VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+  ).run(
+    id,
+    name,
+    description,
+    JSON.stringify(features),
+    imageUrl,
+    pricePerHour,
+    createdAt,
+  );
 
   return res.status(201).json({ id, createdAt });
 });
@@ -259,7 +280,7 @@ app.patch("/api/admin/machines/:id", (req, res) => {
 
   const current = db
     .prepare(
-      "SELECT id, name, description, featuresJson, imageUrl, active, createdAt FROM machines WHERE id = ?",
+      "SELECT id, name, description, featuresJson, imageUrl, pricePerHour, active, createdAt FROM machines WHERE id = ?",
     )
     .get(id) as
     | {
@@ -268,6 +289,7 @@ app.patch("/api/admin/machines/:id", (req, res) => {
         description: string;
         featuresJson: string;
         imageUrl: string;
+        pricePerHour: number;
         active: 0 | 1;
         createdAt: string;
       }
@@ -280,6 +302,9 @@ app.patch("/api/admin/machines/:id", (req, res) => {
     req.body?.description ?? current.description,
   ).trim();
   const nextImageUrl = String(req.body?.imageUrl ?? current.imageUrl).trim();
+  const nextPricePerHour = Number(
+    req.body?.pricePerHour ?? current.pricePerHour ?? 0,
+  );
   const nextActiveRaw =
     typeof req.body?.active === "boolean"
       ? req.body.active
@@ -301,13 +326,20 @@ app.patch("/api/admin/machines/:id", (req, res) => {
     });
   }
 
+  if (!Number.isFinite(nextPricePerHour) || nextPricePerHour <= 0) {
+    return res
+      .status(400)
+      .json({ message: "pricePerHour peab olema positiivne number" });
+  }
+
   db.prepare(
-    "UPDATE machines SET name = ?, description = ?, featuresJson = ?, imageUrl = ?, active = ? WHERE id = ?",
+    "UPDATE machines SET name = ?, description = ?, featuresJson = ?, imageUrl = ?, pricePerHour = ?, active = ? WHERE id = ?",
   ).run(
     nextName,
     nextDescription,
     JSON.stringify(nextFeatures),
     nextImageUrl,
+    nextPricePerHour,
     nextActiveRaw ? 1 : 0,
     id,
   );
