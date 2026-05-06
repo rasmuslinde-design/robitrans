@@ -67,6 +67,17 @@ type BookingRow = {
   createdAt: string;
 };
 
+type Machine = {
+  id: string;
+  name: string;
+  description: string;
+  features: string[];
+  imageUrl: string;
+  createdAt: string;
+};
+
+type AdminMachine = Machine & { active: 0 | 1 };
+
 function isoMonth(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -203,32 +214,26 @@ function Section({ id, title, subtitle, children }: any) {
 }
 
 function Machines() {
-  const items = [
-    {
-      name: "Kraanaauto rent",
-      desc: "Tõstetööd, elementide paigaldus ja materjalide liigutamine. Sobib ehituseks ja hooldustöödeks.",
-      features: [
-        "Kogenud juht (valikuline)",
-        "Täpne positsioneerimine",
-        "Kiire kohaletoomine",
-      ],
-      image: "/kraana.webp",
-    },
-    {
-      name: "Tõstuk (forklift) rent",
-      desc: "Lao- ja ehitustöödeks, kauba liigutamiseks ning laadimiseks. Hea manööverdusvõimega.",
-      features: ["Paindlik rendiaeg", "Hooldatud tehnika", "Kõrge töökindlus"],
-      image: "/forklift.avif",
-    },
-  ];
+  const [items, setItems] = useState<Machine[]>([]);
+
+  useEffect(() => {
+    fetch("/api/machines")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { machines: Machine[] }) => {
+        setItems(Array.isArray(data.machines) ? data.machines : []);
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, []);
 
   return (
     <div className="grid grid--cards">
       {items.map((m) => (
-        <article key={m.name} className="card">
-          <StockImage className="machineImg" src={m.image} alt={m.name} />
+        <article key={m.id} className="card">
+          <StockImage className="machineImg" src={m.imageUrl} alt={m.name} />
           <h3>{m.name}</h3>
-          <p className="muted">{m.desc}</p>
+          <p className="muted">{m.description}</p>
           <ul className="list">
             {m.features.map((f) => (
               <li key={f}>{f}</li>
@@ -545,7 +550,17 @@ function Admin() {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>("");
+  const [tab, setTab] = useState<"bookings" | "machines">("bookings");
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+
+  const [machines, setMachines] = useState<AdminMachine[]>([]);
+  const [newMachine, setNewMachine] = useState<{
+    name: string;
+    description: string;
+    imageUrl: string;
+    features: string;
+  }>({ name: "", description: "", imageUrl: "", features: "" });
+
   const [editing, setEditing] = useState<null | {
     id: string;
     machineType: MachineType;
@@ -555,6 +570,15 @@ function Admin() {
     email: string;
     phone: string;
     additionalInfo: string;
+  }>(null);
+
+  const [editingMachine, setEditingMachine] = useState<null | {
+    id: string;
+    name: string;
+    description: string;
+    imageUrl: string;
+    active: 0 | 1;
+    features: string;
   }>(null);
 
   async function login() {
@@ -584,6 +608,19 @@ function Admin() {
     }
     const data = (await res.json()) as { bookings: BookingRow[] };
     setBookings(data.bookings);
+  }
+
+  async function loadMachines(currentToken: string) {
+    setError("");
+    const res = await fetch("/api/admin/machines", {
+      headers: { Authorization: `Bearer ${currentToken}` },
+    });
+    if (!res.ok) {
+      setError("Pole lubatud või sessioon aegus.");
+      return;
+    }
+    const data = (await res.json()) as { machines: AdminMachine[] };
+    setMachines(data.machines ?? []);
   }
 
   function machineLabel(m?: MachineType) {
@@ -634,8 +671,85 @@ function Admin() {
     await loadBookings(token);
   }
 
+  function parseFeatureLines(raw: string): string[] {
+    return raw
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+
+  async function createMachine() {
+    setError("");
+    const features = parseFeatureLines(newMachine.features);
+    const res = await fetch("/api/admin/machines", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: newMachine.name,
+        description: newMachine.description,
+        imageUrl: newMachine.imageUrl,
+        features,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError((data as any)?.message ?? "Lisamine ebaõnnestus.");
+      return;
+    }
+    setNewMachine({ name: "", description: "", imageUrl: "", features: "" });
+    await loadMachines(token);
+  }
+
+  async function deleteMachine(id: string) {
+    setError("");
+    const res = await fetch(`/api/admin/machines/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError((data as any)?.message ?? "Kustutamine ebaõnnestus.");
+      return;
+    }
+    await loadMachines(token);
+  }
+
+  async function saveMachineEdit() {
+    if (!editingMachine) return;
+    setError("");
+    const res = await fetch(`/api/admin/machines/${editingMachine.id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: editingMachine.name,
+        description: editingMachine.description,
+        imageUrl: editingMachine.imageUrl,
+        active: editingMachine.active,
+        features: parseFeatureLines(editingMachine.features),
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError((data as any)?.message ?? "Muutmine ebaõnnestus.");
+      return;
+    }
+
+    setEditingMachine(null);
+    await loadMachines(token);
+  }
+
   useEffect(() => {
-    if (token) loadBookings(token);
+    if (token) {
+      loadBookings(token);
+      loadMachines(token);
+    }
   }, [token]);
 
   if (!token) {
@@ -671,197 +785,450 @@ function Admin() {
   }
 
   return (
-    <div className="container" style={{ padding: "40px 0" }}>
-      <div className="adminHead">
-        <h1>Broneeringud</h1>
-        <div style={{ display: "flex", gap: 10 }}>
+    <div>
+      <header className="nav">
+        <div className="nav__left">
+          <div className="logo">
+            <img
+              className="brandLogo"
+              src="/tekstigatraktor.png"
+              alt="RobiTrans OÜ"
+            />
+          </div>
+        </div>
+
+        <nav className="nav__right">
           <button
-            className="btn btn--ghost"
-            onClick={() => loadBookings(token)}
+            type="button"
+            className="nav__link"
+            onClick={() => setTab("bookings")}
+            aria-current={tab === "bookings" ? "page" : undefined}
+          >
+            Broneeringud
+          </button>
+          <button
+            type="button"
+            className="nav__link"
+            onClick={() => setTab("machines")}
+            aria-current={tab === "machines" ? "page" : undefined}
+          >
+            Masinad
+          </button>
+          <button
+            type="button"
+            className="nav__link"
+            onClick={() =>
+              tab === "bookings" ? loadBookings(token) : loadMachines(token)
+            }
           >
             Värskenda
           </button>
           <button
-            className="btn btn--small"
+            type="button"
+            className="nav__link"
             onClick={() => {
               localStorage.removeItem("adminToken");
               setToken("");
+              window.location.assign("/");
             }}
           >
             Logi välja
           </button>
+        </nav>
+      </header>
+
+      <div className="container" style={{ padding: "40px 0" }}>
+        <div className="adminHead">
+          <h1>{tab === "bookings" ? "Broneeringud" : "Masinad"}</h1>
         </div>
-      </div>
 
-      {error ? <div className="notice notice--err">{error}</div> : null}
+        {error ? <div className="notice notice--err">{error}</div> : null}
 
-      <div className="tableWrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Masin</th>
-              <th>Kuupäev</th>
-              <th>Rent</th>
-              <th>Nimi</th>
-              <th>Email</th>
-              <th>Telefon</th>
-              <th>Lisa info</th>
-              <th>Loodud</th>
-              <th>Tegevused</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map((b) => (
-              <tr key={b.id}>
-                <td>{machineLabel(b.machineType)}</td>
-                <td>{b.date}</td>
-                <td>{b.rentType === "JUHIGA" ? "Juhiga" : "Juhita"}</td>
-                <td>{b.name}</td>
-                <td>{b.email}</td>
-                <td>{b.phone}</td>
-                <td style={{ maxWidth: 380 }}>{b.additionalInfo}</td>
-                <td>{new Date(b.createdAt).toLocaleString("et-EE")}</td>
-                <td>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      className="btn btn--small"
-                      onClick={() =>
+        {tab === "bookings" ? (
+          <>
+            <div className="tableWrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Masin</th>
+                    <th>Kuupäev</th>
+                    <th>Rent</th>
+                    <th>Nimi</th>
+                    <th>Email</th>
+                    <th>Telefon</th>
+                    <th>Lisa info</th>
+                    <th>Loodud</th>
+                    <th>Tegevused</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookings.map((b) => (
+                    <tr key={b.id}>
+                      <td>{machineLabel(b.machineType)}</td>
+                      <td>{b.date}</td>
+                      <td>{b.rentType === "JUHIGA" ? "Juhiga" : "Juhita"}</td>
+                      <td>{b.name}</td>
+                      <td>{b.email}</td>
+                      <td>{b.phone}</td>
+                      <td style={{ maxWidth: 380 }}>{b.additionalInfo}</td>
+                      <td>{new Date(b.createdAt).toLocaleString("et-EE")}</td>
+                      <td>
+                        <div
+                          style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                        >
+                          <button
+                            className="btn btn--small"
+                            onClick={() =>
+                              setEditing({
+                                id: b.id,
+                                machineType: (b.machineType ??
+                                  "TOSTUK") as MachineType,
+                                date: b.date,
+                                rentType: b.rentType,
+                                name: b.name,
+                                email: b.email,
+                                phone: b.phone,
+                                additionalInfo: b.additionalInfo,
+                              })
+                            }
+                          >
+                            Muuda
+                          </button>
+                          <button
+                            className="btn btn--small"
+                            onClick={() => deleteBooking(b.id)}
+                          >
+                            Kustuta
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {bookings.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="muted">
+                        Broneeringuid pole.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            {editing ? (
+              <div className="adminCard" style={{ marginTop: 20 }}>
+                <h2>Muuda broneeringut</h2>
+                <div className="form">
+                  <div className="form__row">
+                    <label>Masin</label>
+                    <select
+                      value={editing.machineType}
+                      onChange={(e) =>
                         setEditing({
-                          id: b.id,
-                          machineType: (b.machineType ??
-                            "TOSTUK") as MachineType,
-                          date: b.date,
-                          rentType: b.rentType,
-                          name: b.name,
-                          email: b.email,
-                          phone: b.phone,
-                          additionalInfo: b.additionalInfo,
+                          ...editing,
+                          machineType: e.target.value as MachineType,
                         })
                       }
                     >
-                      Muuda
+                      <option value="KRAANAUTO">Kraanaauto</option>
+                      <option value="TOSTUK">Tõstuk</option>
+                    </select>
+                  </div>
+                  <div className="form__row">
+                    <label>Kuupäev</label>
+                    <input
+                      type="date"
+                      value={editing.date}
+                      onChange={(e) =>
+                        setEditing({ ...editing, date: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="form__row">
+                    <label>Rent</label>
+                    <select
+                      value={editing.rentType}
+                      onChange={(e) =>
+                        setEditing({
+                          ...editing,
+                          rentType: e.target.value as RentType,
+                        })
+                      }
+                    >
+                      <option value="JUHIGA">Juhiga rent</option>
+                      <option value="JUHITA">Juhita rent</option>
+                    </select>
+                  </div>
+                  <div className="form__row">
+                    <label>Nimi</label>
+                    <input
+                      value={editing.name}
+                      onChange={(e) =>
+                        setEditing({ ...editing, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="form__row">
+                    <label>Email</label>
+                    <input
+                      type="email"
+                      value={editing.email}
+                      onChange={(e) =>
+                        setEditing({ ...editing, email: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="form__row">
+                    <label>Telefon</label>
+                    <input
+                      value={editing.phone}
+                      onChange={(e) =>
+                        setEditing({ ...editing, phone: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="form__row">
+                    <label>Lisa info</label>
+                    <textarea
+                      rows={4}
+                      value={editing.additionalInfo}
+                      onChange={(e) =>
+                        setEditing({
+                          ...editing,
+                          additionalInfo: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button className="btn btn--primary" onClick={saveEdit}>
+                      Salvesta
                     </button>
                     <button
                       className="btn btn--small"
-                      onClick={() => deleteBooking(b.id)}
+                      onClick={() => setEditing(null)}
                     >
-                      Kustuta
+                      Tühista
                     </button>
                   </div>
-                </td>
-              </tr>
-            ))}
-            {bookings.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="muted">
-                  Broneeringuid pole.
-                </td>
-              </tr>
+                </div>
+              </div>
             ) : null}
-          </tbody>
-        </table>
+          </>
+        ) : (
+          <>
+            <div className="adminCard" style={{ marginTop: 10 }}>
+              <h2>Lisa uus masin</h2>
+              <div className="form">
+                <div className="form__row">
+                  <label>Nimi</label>
+                  <input
+                    value={newMachine.name}
+                    onChange={(e) =>
+                      setNewMachine({ ...newMachine, name: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form__row">
+                  <label>Kirjeldus</label>
+                  <textarea
+                    rows={3}
+                    value={newMachine.description}
+                    onChange={(e) =>
+                      setNewMachine({
+                        ...newMachine,
+                        description: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+                <div className="form__row">
+                  <label>Pildi URL</label>
+                  <input
+                    placeholder="Näiteks /forklift.avif või https://..."
+                    value={newMachine.imageUrl}
+                    onChange={(e) =>
+                      setNewMachine({ ...newMachine, imageUrl: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form__row">
+                  <label>Omadused (1 rida = 1 punkt)</label>
+                  <textarea
+                    rows={4}
+                    value={newMachine.features}
+                    onChange={(e) =>
+                      setNewMachine({ ...newMachine, features: e.target.value })
+                    }
+                    placeholder="Paindlik rendiaeg\nHooldatud tehnika\nKõrge töökindlus"
+                  />
+                </div>
+                <button className="btn btn--primary" onClick={createMachine}>
+                  Postita
+                </button>
+              </div>
+            </div>
+
+            <div className="tableWrap" style={{ marginTop: 20 }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Nimi</th>
+                    <th>Pilt</th>
+                    <th>Aktiivne</th>
+                    <th>Loodud</th>
+                    <th>Tegevused</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {machines.map((m) => (
+                    <tr key={m.id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{m.name}</div>
+                        <div className="muted" style={{ maxWidth: 520 }}>
+                          {m.description}
+                        </div>
+                      </td>
+                      <td style={{ width: 140 }}>
+                        <StockImage
+                          className="machineImg"
+                          src={m.imageUrl}
+                          alt={m.name}
+                        />
+                      </td>
+                      <td>{m.active ? "Jah" : "Ei"}</td>
+                      <td>{new Date(m.createdAt).toLocaleString("et-EE")}</td>
+                      <td>
+                        <div
+                          style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                        >
+                          <button
+                            className="btn btn--small"
+                            onClick={() =>
+                              setEditingMachine({
+                                id: m.id,
+                                name: m.name,
+                                description: m.description,
+                                imageUrl: m.imageUrl,
+                                active: m.active,
+                                features: (m.features ?? []).join("\n"),
+                              })
+                            }
+                          >
+                            Muuda
+                          </button>
+                          <button
+                            className="btn btn--small"
+                            onClick={() => deleteMachine(m.id)}
+                          >
+                            Eemalda
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {machines.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="muted">
+                        Masinaid pole.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            {editingMachine ? (
+              <div className="adminCard" style={{ marginTop: 20 }}>
+                <h2>Muuda masinat</h2>
+                <div className="form">
+                  <div className="form__row">
+                    <label>Nimi</label>
+                    <input
+                      value={editingMachine.name}
+                      onChange={(e) =>
+                        setEditingMachine({
+                          ...editingMachine,
+                          name: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="form__row">
+                    <label>Kirjeldus</label>
+                    <textarea
+                      rows={3}
+                      value={editingMachine.description}
+                      onChange={(e) =>
+                        setEditingMachine({
+                          ...editingMachine,
+                          description: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="form__row">
+                    <label>Pildi URL</label>
+                    <input
+                      value={editingMachine.imageUrl}
+                      onChange={(e) =>
+                        setEditingMachine({
+                          ...editingMachine,
+                          imageUrl: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="form__row">
+                    <label>Aktiivne</label>
+                    <select
+                      value={String(editingMachine.active)}
+                      onChange={(e) =>
+                        setEditingMachine({
+                          ...editingMachine,
+                          active: e.target.value === "1" ? 1 : 0,
+                        })
+                      }
+                    >
+                      <option value="1">Jah</option>
+                      <option value="0">Ei</option>
+                    </select>
+                  </div>
+                  <div className="form__row">
+                    <label>Omadused (1 rida = 1 punkt)</label>
+                    <textarea
+                      rows={4}
+                      value={editingMachine.features}
+                      onChange={(e) =>
+                        setEditingMachine({
+                          ...editingMachine,
+                          features: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      className="btn btn--primary"
+                      onClick={saveMachineEdit}
+                    >
+                      Salvesta
+                    </button>
+                    <button
+                      className="btn btn--small"
+                      onClick={() => setEditingMachine(null)}
+                    >
+                      Tühista
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
-
-      {editing ? (
-        <div className="adminCard" style={{ marginTop: 20 }}>
-          <h2>Muuda broneeringut</h2>
-          <div className="form">
-            <div className="form__row">
-              <label>Masin</label>
-              <select
-                value={editing.machineType}
-                onChange={(e) =>
-                  setEditing({
-                    ...editing,
-                    machineType: e.target.value as MachineType,
-                  })
-                }
-              >
-                <option value="KRAANAUTO">Kraanaauto</option>
-                <option value="TOSTUK">Tõstuk</option>
-              </select>
-            </div>
-            <div className="form__row">
-              <label>Kuupäev</label>
-              <input
-                type="date"
-                value={editing.date}
-                onChange={(e) =>
-                  setEditing({ ...editing, date: e.target.value })
-                }
-              />
-            </div>
-            <div className="form__row">
-              <label>Rent</label>
-              <select
-                value={editing.rentType}
-                onChange={(e) =>
-                  setEditing({
-                    ...editing,
-                    rentType: e.target.value as RentType,
-                  })
-                }
-              >
-                <option value="JUHIGA">Juhiga rent</option>
-                <option value="JUHITA">Juhita rent</option>
-              </select>
-            </div>
-            <div className="form__row">
-              <label>Nimi</label>
-              <input
-                value={editing.name}
-                onChange={(e) =>
-                  setEditing({ ...editing, name: e.target.value })
-                }
-              />
-            </div>
-            <div className="form__row">
-              <label>Email</label>
-              <input
-                type="email"
-                value={editing.email}
-                onChange={(e) =>
-                  setEditing({ ...editing, email: e.target.value })
-                }
-              />
-            </div>
-            <div className="form__row">
-              <label>Telefon</label>
-              <input
-                value={editing.phone}
-                onChange={(e) =>
-                  setEditing({ ...editing, phone: e.target.value })
-                }
-              />
-            </div>
-            <div className="form__row">
-              <label>Lisa info</label>
-              <textarea
-                rows={4}
-                value={editing.additionalInfo}
-                onChange={(e) =>
-                  setEditing({
-                    ...editing,
-                    additionalInfo: e.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button className="btn btn--primary" onClick={saveEdit}>
-                Salvesta
-              </button>
-              <button
-                className="btn btn--small"
-                onClick={() => setEditing(null)}
-              >
-                Tühista
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

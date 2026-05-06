@@ -71,6 +71,33 @@ app.get("/api/availability", (req, res) => {
   res.json({ bookedDates: rows.map((r) => r.date) });
 });
 
+app.get("/api/machines", (_req, res) => {
+  const rows = db
+    .prepare(
+      "SELECT id, name, description, featuresJson, imageUrl, active, createdAt FROM machines WHERE active = 1 ORDER BY createdAt ASC",
+    )
+    .all() as Array<{
+    id: string;
+    name: string;
+    description: string;
+    featuresJson: string;
+    imageUrl: string;
+    active: 0 | 1;
+    createdAt: string;
+  }>;
+
+  const machines = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    features: JSON.parse(r.featuresJson ?? "[]"),
+    imageUrl: r.imageUrl,
+    createdAt: r.createdAt,
+  }));
+
+  res.json({ machines });
+});
+
 app.post("/api/bookings", async (req, res) => {
   const parsed = CreateBookingSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -168,6 +195,139 @@ function requireAdmin(req: express.Request, res: express.Response) {
   }
   return true;
 }
+
+app.get("/api/admin/machines", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
+  const rows = db
+    .prepare(
+      "SELECT id, name, description, featuresJson, imageUrl, active, createdAt FROM machines ORDER BY createdAt DESC",
+    )
+    .all() as Array<{
+    id: string;
+    name: string;
+    description: string;
+    featuresJson: string;
+    imageUrl: string;
+    active: 0 | 1;
+    createdAt: string;
+  }>;
+
+  res.json({
+    machines: rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      features: JSON.parse(r.featuresJson ?? "[]"),
+      imageUrl: r.imageUrl,
+      active: r.active,
+      createdAt: r.createdAt,
+    })),
+  });
+});
+
+app.post("/api/admin/machines", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
+  const name = String(req.body?.name ?? "").trim();
+  const description = String(req.body?.description ?? "").trim();
+  const imageUrl = String(req.body?.imageUrl ?? "").trim();
+  const features = Array.isArray(req.body?.features)
+    ? (req.body.features as unknown[]).map((x) => String(x))
+    : [];
+
+  if (!name || !description || !imageUrl || features.length === 0) {
+    return res.status(400).json({
+      message: "Puuduvad väljad (name, description, imageUrl, features).",
+    });
+  }
+
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  db.prepare(
+    "INSERT INTO machines (id, name, description, featuresJson, imageUrl, active, createdAt) VALUES (?, ?, ?, ?, ?, 1, ?)",
+  ).run(id, name, description, JSON.stringify(features), imageUrl, createdAt);
+
+  return res.status(201).json({ id, createdAt });
+});
+
+app.patch("/api/admin/machines/:id", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
+  const id = String(req.params.id ?? "");
+  if (!id) return res.status(400).json({ message: "Puuduv id" });
+
+  const current = db
+    .prepare(
+      "SELECT id, name, description, featuresJson, imageUrl, active, createdAt FROM machines WHERE id = ?",
+    )
+    .get(id) as
+    | {
+        id: string;
+        name: string;
+        description: string;
+        featuresJson: string;
+        imageUrl: string;
+        active: 0 | 1;
+        createdAt: string;
+      }
+    | undefined;
+
+  if (!current) return res.status(404).json({ message: "Masinat ei leitud" });
+
+  const nextName = String(req.body?.name ?? current.name).trim();
+  const nextDescription = String(
+    req.body?.description ?? current.description,
+  ).trim();
+  const nextImageUrl = String(req.body?.imageUrl ?? current.imageUrl).trim();
+  const nextActiveRaw =
+    typeof req.body?.active === "boolean"
+      ? req.body.active
+      : typeof req.body?.active === "number"
+        ? Boolean(req.body.active)
+        : current.active === 1;
+  const nextFeatures = Array.isArray(req.body?.features)
+    ? (req.body.features as unknown[]).map((x) => String(x))
+    : (JSON.parse(current.featuresJson ?? "[]") as string[]);
+
+  if (
+    !nextName ||
+    !nextDescription ||
+    !nextImageUrl ||
+    nextFeatures.length === 0
+  ) {
+    return res.status(400).json({
+      message: "Puuduvad väljad (name, description, imageUrl, features).",
+    });
+  }
+
+  db.prepare(
+    "UPDATE machines SET name = ?, description = ?, featuresJson = ?, imageUrl = ?, active = ? WHERE id = ?",
+  ).run(
+    nextName,
+    nextDescription,
+    JSON.stringify(nextFeatures),
+    nextImageUrl,
+    nextActiveRaw ? 1 : 0,
+    id,
+  );
+
+  return res.json({ ok: true });
+});
+
+app.delete("/api/admin/machines/:id", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
+  const id = String(req.params.id ?? "");
+  if (!id) return res.status(400).json({ message: "Puuduv id" });
+
+  const info = db.prepare("DELETE FROM machines WHERE id = ?").run(id) as {
+    changes: number;
+  };
+  if (!info.changes)
+    return res.status(404).json({ message: "Masinat ei leitud" });
+  return res.json({ ok: true });
+});
 
 app.delete("/api/admin/bookings/:id", (req, res) => {
   if (!requireAdmin(req, res)) return;
