@@ -883,12 +883,11 @@ function Footer() {
         <div>
           <h4>Kontakt</h4>
           <p>
-            Telefon: <a href="tel:+37255555555">+372 5555 5555</a>
+            Telefon: <a href="tel:+37256212888">+372 56212888</a>
           </p>
           <p>
             Email: <a href="mailto:info@robitrans.ee">info@robitrans.ee</a>
           </p>
-          <p>Aadress: Näide tn 1, Tallinn</p>
         </div>
       </div>
     </footer>
