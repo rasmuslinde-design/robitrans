@@ -161,11 +161,7 @@ function Hero({
 }) {
   return (
     <section id="home" className="hero">
-      <StockImage
-        className="hero__bg"
-        src="https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=2400&q=80"
-        alt="Tõstuk tööhoos"
-      />
+      <StockImage className="hero__bg" src="/crane.jpg" alt="Kraana tööhoos" />
       <div className="hero__overlay" />
       <div className="hero__content">
         <h1>Kiire ja soodne masinate rentimine</h1>
@@ -216,15 +212,13 @@ function Machines() {
         "Täpne positsioneerimine",
         "Kiire kohaletoomine",
       ],
-      image:
-        "https://images.unsplash.com/photo-1591768793355-74d04bb6608f?auto=format&fit=crop&w=1600&q=80",
+      image: "/kraana.webp",
     },
     {
       name: "Tõstuk (forklift) rent",
       desc: "Lao- ja ehitustöödeks, kauba liigutamiseks ning laadimiseks. Hea manööverdusvõimega.",
       features: ["Paindlik rendiaeg", "Hooldatud tehnika", "Kõrge töökindlus"],
-      image:
-        "https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=1600&q=80",
+      image: "/forklift.avif",
     },
   ];
 
@@ -251,20 +245,17 @@ function Works() {
     {
       title: "Paigaldus ja tõstetööd",
       desc: "Aitame tõsta ja paigaldada elemente, seadmeid ja materjale nii sise- kui välitingimustes.",
-      image:
-        "https://images.unsplash.com/photo-1580906855280-9f6c0c2b6b1d?auto=format&fit=crop&w=1200&q=80",
+      image: "/paigaldus.webp",
     },
     {
       title: "Transport ja laadimine",
       desc: "Masinate ja materjalide liigutamine ning logistiline abi objektil.",
-      image:
-        "https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1200&q=80",
+      image: "/transport.png",
     },
     {
       title: "Lao- ja platsitööd",
       desc: "Tõstukiga kauba liigutamine, ladustamine ja komplekteerimine.",
-      image:
-        "https://images.unsplash.com/photo-1581092161562-8d2d1b0b86d8?auto=format&fit=crop&w=1200&q=80",
+      image: "/warehouse.jpg",
     },
   ];
 
